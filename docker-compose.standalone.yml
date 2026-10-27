@@ -1,0 +1,49 @@
+# ==============================================================================
+# 000-MISSION-CONTROL: STANDALONE SINGLE-CONTAINER DOCKER COMPOSE PROFILE
+# Use this when running behind an existing external reverse proxy (Traefik, Nginx,
+# Cloudflare Tunnel) or for local standalone testing on port 3000.
+# Run with: docker compose -f docker-compose.standalone.yml up -d --build
+# ==============================================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 000_standalone_app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: 000_standalone_api
+    restart: unless-stopped
+    security_opt:
+      - apparmor:unconfined
+    ports:
+      - "${API_PORT:-4001}:4000"
+    environment:
+      - API_PORT=4000
+      - API_HOST=0.0.0.0
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:4000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
